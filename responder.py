@@ -3,34 +3,55 @@ from config import GROQ_API_KEY, LLM_MODEL
 
 _client = Groq(api_key=GROQ_API_KEY)
 
+_SYSTEM_PROMPTS = {
+    "safe": (
+        "You are a helpful home repair assistant. Answer the user's question with clear, "
+        "specific, and actionable instructions. Include what tools and materials they'll need, "
+        "step-by-step guidance, and any practical tips that will help them succeed."
+    ),
+    "caution": (
+        "You are a home repair assistant. The repair the user is asking about carries a real "
+        "risk of injury or property damage if done incorrectly. Start your response by clearly "
+        "stating this risk and explaining specifically why it exists (e.g., working with live "
+        "electrical components, risk of pipe flooding). Then provide step-by-step instructions. "
+        "Throughout, recommend that the user hire a licensed professional if they feel uncertain "
+        "at any point. Do not downplay the risks."
+    ),
+    "refuse": (
+        "Do NOT provide any how-to instructions, steps, procedures, methods, or guidance — "
+        "not even general, partial, or framed as \"what a professional would do.\" Do not "
+        "describe the technical process in any way.\n\n"
+        "Your response must do exactly three things:\n"
+        "1. Tell the user clearly that this repair requires a licensed professional.\n"
+        "2. Explain briefly why it is dangerous (e.g., fire risk, permit required, risk of "
+        "structural collapse).\n"
+        "3. Tell them what type of professional to contact (electrician, plumber, structural "
+        "engineer, etc.).\n\n"
+        "If the user pushes back or asks for partial guidance, hold firm. Do not accommodate "
+        "requests for \"just a tip\" or \"just an overview.\""
+    ),
+}
+
 
 def generate_safe_response(question: str, tier: str) -> str:
     """
     Generate a response to a home repair question, calibrated to its safety tier.
 
-    TODO — Milestone 2:
+    Returns the response as a plain string.
 
-    Before writing any code, complete specs/responder-spec.md. The most important
-    fields are the three system prompts — one per tier. Write them out fully before
-    generating any code; a vague description produces a vague prompt.
-
-    `tier` is one of "safe", "caution", or "refuse" — returned by classify_safety_tier().
-
-    Your implementation should use a different system prompt for each tier:
-      - "safe"    : answer helpfully and directly; the user can proceed
-      - "caution" : answer but include clear safety warnings and recommend
-                    professional review for anything they're unsure about
-      - "refuse"  : do NOT provide how-to instructions; explain why the repair
-                    is dangerous and strongly recommend a licensed professional
-
-    The refuse case is the hardest to get right. An LLM that says "you should hire
-    a professional, but here's how to do it anyway" has defeated the entire purpose
-    of the safety layer. Your system prompt needs to be explicit enough to prevent
-    that — see specs/responder-spec.md for the design decision field on grounding.
-
-    If tier is unrecognized (e.g., "unknown" from an unimplemented classifier),
-    treat it as "caution" to fail safe rather than fail open.
-
-    Return the response as a plain string.
+    Tier behavior:
+      - "safe"    : answer helpfully and directly
+      - "caution" : answer with explicit safety warnings and professional recommendation
+      - "refuse"  : decline to give instructions; explain the danger and refer to a professional
+      - unknown   : treated as "caution" to fail safe rather than fail open
     """
-    return "⚙️ Response generation not yet implemented. Complete Milestone 2 to activate answers."
+    system_prompt = _SYSTEM_PROMPTS.get(tier, _SYSTEM_PROMPTS["caution"])
+
+    response = _client.chat.completions.create(
+        model=LLM_MODEL,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": question},
+        ],
+    )
+    return response.choices[0].message.content
