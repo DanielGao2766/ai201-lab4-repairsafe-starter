@@ -43,8 +43,8 @@ Record every interaction — question, safety tier, and response preview — to 
 | `"tier"` | `str` | Safety tier assigned to this question |
 | `"question"` | `str` | The user's question, truncated to 300 characters |
 | `"response_preview"` | `str` | First 200 characters of the generated response |
-| `[your field]` | `[type]` | [description] |
-| `[your field]` | `[type]` | [description] |
+| `"question_length"` | `int` | Original character count of the question before truncation |
+| `"response_length"` | `int` | Original character count of the response before truncation |
 
 ---
 
@@ -53,7 +53,19 @@ Record every interaction — question, safety tier, and response preview — to 
 *The required fields truncate the question to 300 characters and the response to 200. Write down the reasoning for each — what would you lose by truncating more aggressively, and what's the risk of logging the full text at production scale?*
 
 ```
-[your answer here]
+Question (300 chars): 300 characters preserves the full intent of most home repair questions,
+including the specific detail that determined the tier. Truncating more aggressively risks
+cutting the phrase that pushed a question from caution to refuse, making the logged question
+look like a different question and the classification appear wrong.
+
+Response (200 chars): 200 characters captures the opening of the model's response — enough to
+confirm tone and whether it led with a safety warning or a refusal. That is the part that
+matters for auditing tier consistency. Shorter truncation often leaves only a generic opener
+that tells you nothing about behavior.
+
+Full-text risk at scale: responses can be 500–2000 tokens; logging them verbatim compounds
+storage cost fast. Users may also embed PII in questions, making full logs a compliance
+liability. The truncation limits capture enough context to audit behavior without those risks.
 ```
 
 ---
@@ -63,7 +75,16 @@ Record every interaction — question, safety tier, and response preview — to 
 *What happens if `logs/` doesn't exist when the function runs for the first time? How will you handle that — and why is this worth thinking about at all?*
 
 ```
-[your answer here]
+open("logs/audit.jsonl", "a") raises FileNotFoundError because Python will create the file
+but not its parent directory. logs/ is typically .gitignored, so every fresh clone starts
+without it — this is the common case, not an edge case.
+
+Handle it with: os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True) before the open() call.
+exist_ok=True makes it a no-op on every subsequent call.
+
+This matters because the failure is silent from the user's perspective — the app keeps running,
+classifications keep happening, and nothing gets logged. In a safety-critical system the audit
+log is the accountability record; a silent logging failure is worse than a loud crash.
 ```
 
 ---
@@ -73,7 +94,7 @@ Record every interaction — question, safety tier, and response preview — to 
 *Write an example of what you want the one-line terminal summary to look like after a question is logged. Be specific about format.*
 
 ```
-[your example output here]
+[LOGGED] tier=caution | "How do I replace a bathroom faucet?" → 187 chars
 ```
 
 ---
